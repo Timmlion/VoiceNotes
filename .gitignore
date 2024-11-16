@@ -1,0 +1,5 @@
+.env
+app/__pycache__/main.cpython-312.pyc
+app.log
+uploads/voice_note.wav
+.github/dependabot.yml

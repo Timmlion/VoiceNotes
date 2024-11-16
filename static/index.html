@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Voice Notes</title>
+    <style>
+        /* General Styles */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            margin: 0;
+            font-family: monospace;
+            background-color: #151823;
+            color: #FFFFFF;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Backlight Effect */
+        body::after {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(270deg, #0fffc1, #7e0fff);
+            background-size: 200% 200%;
+            animation: animateGlow 10s ease infinite;
+            opacity: 0.1;
+            z-index: -1;
+            filter: blur(5vw);
+        }
+
+        @keyframes animateGlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Layout Styles */
+        #left-column, #right-column {
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        #left-column {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            background-color: rgba(21, 24, 35, 0.9);
+        }
+
+        #right-column {
+            width: 50%;
+            border-left: 1px solid #252B37;
+            background-color: rgba(21, 24, 35, 0.9);
+        }
+
+        /* Controls */
+        #controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background-color: #252B37;
+            color: #FFFFFF;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        button:active {
+            background-color: #0fffc1;
+            color: #151823;
+        }
+
+        /* Chat Styles */
+        #chat {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #252B37;
+            padding: 10px;
+            background-color: #151823;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            max-width: 80%;
+            display: inline-block;
+        }
+
+        .message.user {
+            background-color: #0fffc1;
+            color: #151823;
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .message.llm {
+            background-color: #7e0fff;
+            color: #FFFFFF;
+            align-self: flex-start;
+            text-align: left;
+        }
+
+        /* Note Styles */
+        #note {
+            padding: 10px;
+            background-color: #151823;
+            color: #FFFFFF;
+        }
+
+        /* Loading Animation */
+        #loading {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0fffc1;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .loader {
+            border: 8px solid #252B37;
+            border-top: 8px solid #0fffc1;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Scrollbar Styles */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #252B37;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Animation -->
+    <div id="loading">
+        <div class="loader"></div>
+        Processing...
+    </div>
+
+    <div id="left-column">
+        <div id="controls">
+            <button id="push-to-talk">Hold to Talk</button>
+        </div>
+        <div id="chat">
+            <!-- Chat messages will appear here -->
+        </div>
+    </div>
+    <div id="right-column">
+        <h2>Generated Note</h2>
+        <!-- Download Button -->
+        <button id="download-note">Download Note</button>
+        <div id="note">
+            <!-- Markdown content will be rendered here -->
+        </div>
+    </div>
+
+    <!-- Include marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        const pushToTalkButton = document.getElementById('push-to-talk');
+        const loadingDiv = document.getElementById('loading');
+        const downloadButton = document.getElementById('download-note');
+        downloadButton.style.display = 'none'; // Hide download button initially
+
+        // Store chat messages in an array
+        let chatMessages = [];
+
+        pushToTalkButton.onmousedown = async () => {
+            pushToTalkButton.textContent = 'Recording...';
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            audioChunks = [];
+            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+
+            mediaRecorder.onstop = async () => {
+                // Show loading animation
+                loadingDiv.style.display = 'block';
+                pushToTalkButton.textContent = 'Hold to Talk';
+
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'voice_note.wav');
+
+                // Prepare the current document and chat log
+                const noteContent = document.getElementById('note').innerText || '';
+                const chat = document.getElementById('chat');
+                const messages = [];
+
+                chatMessages.forEach(msg => {
+                    messages.push({
+                        role: msg.role,
+                        content: msg.content
+                    });
+                });
+
+                // Convert messages to JSON string
+                const messagesJSON = JSON.stringify(messages);
+
+                // Append additional data to the form
+                formData.append('note', noteContent);
+                formData.append('messages', messagesJSON);
+
+                try {
+                    const response = await fetch('/upload/', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    const result = await response.json();
+
+                    // Update the chat with transcription and response
+                    // User's transcription
+                    const userMessage = document.createElement('div');
+                    userMessage.classList.add('message', 'user');
+                    userMessage.textContent = result.transcription;
+                    chat.appendChild(userMessage);
+
+                    // Add to chatMessages array
+                    chatMessages.push({
+                        role: 'user',
+                        content: result.transcription
+                    });
+
+                    // LLM's response
+                    const llmMessage = document.createElement('div');
+                    llmMessage.classList.add('message', 'llm');
+                    llmMessage.textContent = result.response;
+                    chat.appendChild(llmMessage);
+
+                    // Add to chatMessages array
+                    chatMessages.push({
+                        role: 'assistant',
+                        content: result.response
+                    });
+
+                    // Scroll to the bottom
+                    chat.scrollTop = chat.scrollHeight;
+
+                    // Render the markdown note on the right column
+                    const noteDiv = document.getElementById('note');
+                    noteDiv.innerHTML = marked.parse(result.note);
+
+                    // Enable and show the download button
+                    downloadButton.style.display = 'block';
+                    downloadButton.onclick = () => {
+                        const blob = new Blob([result.note], { type: 'text/markdown' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'note.md';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    };
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred while processing your request.');
+                } finally {
+                    // Hide loading animation
+                    loadingDiv.style.display = 'none';
+                }
+            };
+
+            mediaRecorder.start();
+        };
+
+        pushToTalkButton.onmouseup = () => {
+            mediaRecorder.stop();
+        };
+
+        // For mobile devices (touch support)
+        pushToTalkButton.ontouchstart = (e) => {
+            e.preventDefault();
+            pushToTalkButton.onmousedown();
+        };
+
+        pushToTalkButton.ontouchend = (e) => {
+            e.preventDefault();
+            pushToTalkButton.onmouseup();
+        };
+    </script>
+</body>
+</html>
