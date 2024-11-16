@@ -1,7 +1,5 @@
 fastapi
 uvicorn
-python-multipart
-pydub
 replicate
 python-dotenv
 openai
